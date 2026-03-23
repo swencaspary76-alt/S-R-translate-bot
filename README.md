@@ -1,0 +1,1 @@
+# S-R-translate-bot
