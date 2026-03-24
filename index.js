@@ -9,7 +9,19 @@ const {
 } = require('discord.js');
 
 const fs = require('fs');
-const fetch = require('node-fetch');
+let fetchFn;
+try {
+    // Prefer global fetch (Node 18+). Fall back to node-fetch if available.
+    fetchFn = globalThis.fetch || require('node-fetch');
+    // node-fetch v3 when required may be a module with default export
+    if (fetchFn && fetchFn.default) fetchFn = fetchFn.default;
+} catch (err) {
+    if (globalThis.fetch) fetchFn = globalThis.fetch;
+    else {
+        console.error('Fetch is not available. Please run on Node 18+ or install node-fetch v2.');
+        fetchFn = null;
+    }
+}
 
 const client = new Client({
     intents: [
@@ -22,17 +34,28 @@ const client = new Client({
 // ===== Daten laden =====
 let data = { users: {} };
 if (fs.existsSync('./data.json')) {
-    data = JSON.parse(fs.readFileSync('./data.json', 'utf8'));
+    try {
+        data = JSON.parse(fs.readFileSync('./data.json', 'utf8'));
+    } catch (err) {
+        console.error('Konnte data.json nicht parsen, starte mit leerem Objekt:', err);
+        data = { users: {} };
+    }
 }
 
 function saveData() {
-    fs.writeFileSync('./data.json', JSON.stringify(data, null, 2));
+    try {
+        fs.writeFileSync('./data.json', JSON.stringify(data, null, 2));
+    } catch (err) {
+        console.error('Fehler beim Speichern der Daten:', err);
+    }
 }
 
 // ===== Übersetzungsfunktion =====
 async function translate(text, target) {
+    if (!fetchFn) return text;
+
     try {
-        const res = await fetch('https://libretranslate.de/translate', {
+        const res = await fetchFn('https://libretranslate.de/translate', {
             method: 'POST',
             body: JSON.stringify({
                 q: text,
@@ -43,7 +66,7 @@ async function translate(text, target) {
             headers: { 'Content-Type': 'application/json' }
         });
         const json = await res.json();
-        return json.translatedText;
+        return json.translatedText || text;
     } catch (err) {
         console.error('Übersetzungsfehler:', err);
         return text;
@@ -119,6 +142,10 @@ client.on('interactionCreate', async interaction => {
     // Dropdown Auswahl
     if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'lang_select') {
+            if (!data.users[interaction.user.id]) {
+                data.users[interaction.user.id] = { lang: null, active: false };
+            }
+
             const lang = interaction.values[0];
             data.users[interaction.user.id].lang = lang;
             saveData();
@@ -129,6 +156,9 @@ client.on('interactionCreate', async interaction => {
 
     // Buttons
     if (interaction.isButton()) {
+        if (!data.users[interaction.user.id]) {
+            data.users[interaction.user.id] = { lang: null, active: false };
+        }
         const user = data.users[interaction.user.id];
 
         if (interaction.customId === 'activate') {
@@ -158,4 +188,10 @@ client.on('messageCreate', async message => {
 });
 
 // ===== Bot Login =====
-client.login(process.env.DISCORD_TOKEN);
+if (!process.env.DISCORD_TOKEN) {
+    console.error('DISCORD_TOKEN ist nicht gesetzt. Bitte Umgebungvariable setzen.');
+} else {
+    client.login(process.env.DISCORD_TOKEN).catch(err => {
+        console.error('Fehler beim Einloggen:', err);
+    });
+}
