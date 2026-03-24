@@ -97,5 +97,5 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-client.login('DEIN_BOT_TOKEN');
+client.login('DISCORD_TOKEN');
 
