@@ -1,17 +1,14 @@
 {
-  "name": "s-r-translate-bot",
+  "name": "translate-bot",
   "version": "1.0.0",
-  "description": "Discord bot for automatic translations (S-R-translate-bot)",
   "main": "index.js",
-  "engines": { "node": ">=18.0.0" },
+  "type": "commonjs",
   "scripts": {
     "start": "node index.js",
-    "deploy-commands": "node deploy-commands.js"
+    "deploy": "node deploy-commands.js"
   },
   "dependencies": {
-    "discord.js": "^14.11.0",
-    "@discordjs/rest": "^1.6.0",
-    "discord-api-types": "^0.37.30",
-    "node-fetch": "2.6.9"
+    "axios": "^1.6.0",
+    "discord.js": "^14.14.1"
   }
 }
