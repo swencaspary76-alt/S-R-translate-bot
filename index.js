@@ -1,77 +1,6 @@
-const {
-  SlashCommandBuilder,
-  ActionRowBuilder,
-  StringSelectMenuBuilder
-} = require('discord.js');
-const axios = require('axios');
-
-module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('translate')
-    .setDescription('Übersetze Text')
-    .addStringOption(option =>
-      option.setName('text')
-        .setDescription('Text zum Übersetzen')
-        .setRequired(true)
-    ),
-
-  async execute(interaction) {
-    const text = interaction.options.getString('text');
-
-    const menu = new StringSelectMenuBuilder()
-      .setCustomId('language-select')
-      .setPlaceholder('🌍 Sprache wählen')
-      .addOptions([
-        { label: 'Deutsch', value: 'de' },
-        { label: 'Englisch', value: 'en' },
-        { label: 'Spanisch', value: 'es' },
-        { label: 'Italienisch', value: 'it' },
-        { label: 'Französisch', value: 'fr' },
-      ]);
-
-    const row = new ActionRowBuilder().addComponents(menu);
-
-    await interaction.reply({
-      content: 'Wähle die Zielsprache:',
-      components: [row],
-      ephemeral: true
-    });
-
-    const filter = i =>
-      i.customId === 'language-select' &&
-      i.user.id === interaction.user.id;
-
-    const collector = interaction.channel.createMessageComponentCollector({
-      filter,
-      time: 15000
-    });
-
-    collector.on('collect', async i => {
-      const lang = i.values[0];
-
-      try {
-        const res = await axios.post('https://libretranslate.de/translate', {
-          q: text,
-          source: 'auto',
-          target: lang,
-          format: 'text'
-        });
-
-        await i.update({
-          content: `📢 Übersetzung:\n${res.data.translatedText}`,
-          components: []
-        });
-      } catch (err) {
-        await i.update({
-          content: '❌ Fehler bei der Übersetzung',
-          components: []
-        });
-      }
-    });
-  }
-};
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const fs = require('fs');
+const path = require('path');
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
@@ -79,11 +8,23 @@ const client = new Client({
 
 client.commands = new Collection();
 
-const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
+const commandsPath = path.join(__dirname, 'commands');
+
+if (!fs.existsSync(commandsPath)) {
+  console.warn('⚠️  commands/ Verzeichnis nicht gefunden – erstelle es automatisch...');
+  fs.mkdirSync(commandsPath, { recursive: true });
+}
+
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
 for (const file of commandFiles) {
-  const command = require(`./commands/${file}`);
-  client.commands.set(command.data.name, command);
+  const command = require(path.join(commandsPath, file));
+  if (command.data && command.execute) {
+    client.commands.set(command.data.name, command);
+    console.log(`✅ Command geladen: ${command.data.name}`);
+  } else {
+    console.warn(`⚠️  Überspringe ${file} – fehlende 'data' oder 'execute' Eigenschaft`);
+  }
 }
 
 client.once('ready', () => {
@@ -93,9 +34,20 @@ client.once('ready', () => {
 client.on('interactionCreate', async interaction => {
   if (interaction.isChatInputCommand()) {
     const command = client.commands.get(interaction.commandName);
-    if (command) await command.execute(interaction);
+    if (!command) return;
+
+    try {
+      await command.execute(interaction);
+    } catch (error) {
+      console.error(`Fehler beim Ausführen von /${interaction.commandName}:`, error);
+      const reply = { content: '❌ Fehler beim Ausführen des Befehls.', ephemeral: true };
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp(reply);
+      } else {
+        await interaction.reply(reply);
+      }
+    }
   }
 });
 
-client.login('DISCORD_TOKEN');
-
+client.login(process.env.DISCORD_TOKEN);
