@@ -158,4 +158,4 @@ client.on('messageCreate', async message => {
 });
 
 // ===== Bot Login =====
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN=DEIN_BOT_TOKEN);
